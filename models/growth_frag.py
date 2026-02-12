@@ -30,7 +30,7 @@ class Equal_mitosis():
     def run(self,Nmax,Tmax):
         time = 0 
 
-        cell_sizes = np.full((N_max, T_max), np.nan)
+        cell_sizes = np.full((Nmax, Tmax), np.nan)
 
 
 if __name__ == "__main__":
