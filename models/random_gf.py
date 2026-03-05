@@ -1,5 +1,80 @@
 import numpy as np
-import heapq
+from scipy.stats import norm
+from scipy.optimize import bisect
+
+def single_increment(Yk, dt, barc, theta, sigma):
+    # Definition of relevant constants 
+    e = np.exp(- theta* dt)
+    
+    # Constant interecept
+    intercept = np.array(( 1 - e, dt  + (e - 1)/theta)) * barc
+    
+    # Linear update
+    lin = np.array( ((e , 0 ), ((1 - e)/theta, 1)) )
+    
+    #Noise, Cholesky matrix
+    if theta *dt < 1e-4:
+        a = sigma**2 * dt
+        b = sigma**2 /2  * dt **2
+        c = sigma**2 /3 * dt**3
+    else:
+        a = sigma**2 /(2*theta) * (1 -e**2)
+        b = sigma**2 /(2 * theta**2) * (1 - e)**2
+        c = sigma**2 /theta**2 * (dt -2/theta*(1 -e) + 1/(2*theta)*(1-e**2))
+    
+    v11 = np.sqrt(a)
+    v21 = b/v11
+    v22 = np.sqrt(c - v21**2)
+    Cholesky = np.array(( (v11,0),(v21,v22)))
+    
+    
+    # Sampling
+    Z = np.random.randn(2)
+    dBt = Z.dot(Cholesky.T)
+    
+    return intercept + Yk.dot(lin.T) + dBt
+
+def root_function(t, Ck, barc, theta, sigma, tol, remaining):
+    e = np.exp(-theta * t)
+    mt = barc * t + (Ck - barc)/theta * (1 - e)
+
+    if theta * t < 1e-4:
+        sigmat = sigma * np.sqrt(t**3 / 3)
+    else:
+        A = t - 2/theta*(1 - e) + 1/(2*theta)*(1 - e**2)
+        sigmat = sigma/theta * np.sqrt(max(A, 0.0))
+
+    return mt + sigmat * tol - remaining
+
+def sample_time_adaptive_method(tresh , eps, dtmin, C0, barc, theta, sigma):
+    """ 
+
+    Y is the vector (C_t, \int_0^t C_s ds ) 
+
+    """
+    tol = norm.isf(eps)
+    dt = (sigma * tol / (tresh*np.sqrt(3)))**(-2/3)
+    intC = 0
+    Y = np.array((C0, intC)) # Y is the vector (C_t, \int_0^t C_s ds ) 
+    t = 0
+
+    counter_ite = 0
+    while intC < tresh:
+        counter_ite += 1
+        remaining = tresh -intC
+
+        if dt < dtmin:
+            dt = dtmin
+        else:
+            if root_function(t, Ck, barc, theta, sigma, tol, remaining) > 0:
+                dt = bisect(root_function, 0, dt, xtol = dtmin, args = (Ck, barc, theta, sigma, tol, remaining))
+            else:
+                pass
+        t = t + dt
+
+        Y = single_increment(Y, dt, barc, theta, sigma)
+        intC = Y[1]
+    return t - dt + tresh/Ck
 
 class Cell():
     """ Encodes all important informations about a cell """
@@ -23,12 +98,17 @@ class Cell():
         else:
             return offset + ((1 + alpha) * -np.log(U) + (x0 - offset)**(1+alpha))**(1 / (1 + alpha))
     
-    def get_time(self, growth_rate):
+    def get_time(self, growth_rate, dtmin):
         bt, lt, bs, ds = self.get_value()
         if ds == None:
             raise ValueError('The division size has not been computed yet')
-        
-        return 1/growth_rate * np.log(ds / bs)
+        else:
+
+            #==================================================================================
+            time = sample_time_adaptive_method(tresh , eps, dtmin, C0, barc, theta, sigma)
+            # This is not working yet, we need to add the growth rate at birth into cell variables
+            #==================================================================================
+        return time
 
     def division(self):
         """ Divides a cell into two new daughters with the rule of equal mitosis """

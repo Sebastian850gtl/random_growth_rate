@@ -1,27 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
+from scipy.optimize import newton
+from scipy.optimize import bisect
 
 #%% Tests on the approximation for calibrationg delta_t
 
-bar_c = 1
-Cs = 1
-theta = 1
-sigma = 1
+# bar_c = 1
+# Cs = -5
+# theta = 1
+# sigma = 1
 
-b = 3
+# b = 3
 
 
-Tmax = b / bar_c /10
+# Tmax = 10
 
-Tmin = Tmax / 100
+# Tmin = Tmax / 10
 
-t = np.linspace(Tmin,Tmax, 200)
+# t = np.linspace(Tmin,Tmax, 200)
 
-f = lambda t : (b - bar_c * t +  1/theta*(Cs - bar_c)*(1 - np.exp(-theta*t)) ) / ((sigma/theta)*np.sqrt(t - 2/theta *(1 - np.exp(-theta*t)) + 1/(2*theta)*(1 - np.exp(-2*theta*t))))
+# f = lambda t : (b - bar_c * t -  1/theta*(Cs - bar_c)*(1 - np.exp(-theta*t)) ) / ((sigma/theta)*np.sqrt(t - 2/theta *(1 - np.exp(-theta*t)) + 1/(2*theta)*(1 - np.exp(-2*theta*t))))
 
-h = lambda t : (b )/(sigma * t * np.sqrt(t))
-# print(f(Tmax))
+# h = lambda t : (b - Cs*t)/(sigma * t ) #* np.sqrt(t))
+# # print(f(Tmax))
 # plt.figure(dpi = 200)
 # plt.xlabel(r"$\Delta_t$")
 # plt.plot(t, norm.sf(f(t)))
@@ -81,9 +83,14 @@ def single_increment(Yk, dt, barc, theta, sigma):
     lin = np.array( ((e , 0 ), ((1 - e)/theta, 1)) )
     
     #Noise, Cholesky matrix
-    a = sigma**2 /(2*theta) * (1 -e**2)
-    b = sigma**2 /(2 * theta**2) * (1 - e)**2
-    c = sigma**2 /theta**2 * (dt -2/theta*(1 -e) + 1/(2*theta)*(1-e**2))
+    if theta *dt < 1e-4:
+        a = sigma**2 * dt
+        b = sigma**2 /2  * dt **2
+        c = sigma**2 /3 * dt**3
+    else:
+        a = sigma**2 /(2*theta) * (1 -e**2)
+        b = sigma**2 /(2 * theta**2) * (1 - e)**2
+        c = sigma**2 /theta**2 * (dt -2/theta*(1 -e) + 1/(2*theta)*(1-e**2))
     
     v11 = np.sqrt(a)
     v21 = b/v11
@@ -95,39 +102,71 @@ def single_increment(Yk, dt, barc, theta, sigma):
     Z = np.random.randn(2)
     dBt = Z.dot(Cholesky.T)
     
-    #Loop
-    
     return intercept + Yk.dot(lin.T) + dBt
 
-def find_time_adaptative(b, eps, C0, dt, barc, theta, sigma):
+
+def sample_time_adaptive_method(tresh , eps, dtmin, C0, barc, theta, sigma):
+
     tol = norm.isf(eps)
-    print(tol)
+    dt = (sigma * tol / (tresh*np.sqrt(3)))**(-2/3)
     intC = 0
     Y = np.array((C0, intC))
-
-    dt = (sigma * tol / b)**(2/3)
-
     t = 0
+
+
     counter_ite = 0
-    while intC < b:
+    while intC < tresh:
         counter_ite += 1
-        dt = ((b - intC )/(sigma* tol))**(2/3)
+        remaining = tresh -intC
+
+        Ck = Y[0]
+        if dt < dtmin:
+            dt = dtmin
+        else:
+            def f(t):
+                e = np.exp(-theta * t)
+                mt = barc * t + 1/theta*(Ck - barc)*(1 - e)
+                if theta *t < 1e-4:
+                    sigmat = sigma * np.sqrt(t**3 / 3)
+                else:
+                    sigmat = sigma/theta * np.sqrt(t - 2/theta *(1 - e) + 1/(2*theta) * (1 -e**2))
+                return mt + sigmat * tol - remaining
+            if f(dt) > 0:
+                dt = bisect(f, 0, dt, xtol = dtmin)
+            else:
+                pass
         t = t + dt
 
         Y = single_increment(Y, dt, barc, theta, sigma)
         intC = Y[1]
+        print("Iteration", counter_ite, "Integral value: ",intC)
+    return t - dt + tresh/Ck, counter_ite
 
-
-    return t, intC, counter_ite
 
 if __name__ == "__main__":
-    Nt = 20
-    dt = 0.05
+
+#%% Reaching desired size
+    np.random.seed(13)
     sigma = 1
     theta = 1
     barc = 1
-    C0 = -5
     
+    C0 = 1
+
+    tresh = 100
+    dtmin = 1e-3
+    eps = 0.05
+
+    print(sample_time_adaptive_method(tresh , eps, dtmin, C0, barc, theta, sigma))
+
+    # Nt = 20
+    # dt = 0.05
+    # sigma = 1
+    # theta = 1
+    # barc = 1
+    # C0 = -5
+
+
     # res = increment_C_intC(C0, dt, barc, theta, sigma, Nt)
     
     # times = np.linspace(0, (Nt - 1)*dt, Nt)
@@ -169,14 +208,3 @@ if __name__ == "__main__":
     # plt.plot(times,var)
     # plt.plot(times,g(times))
     # plt.show()
-
-#%% Reaching desired size
-    sigma = 1
-    theta = 1
-    barc = 1
-    C0 = 8
-
-    b = 3
-    eps = 0.0005
-
-    print(find_time_adaptative(b, eps, C0, dt, barc, theta, sigma))
