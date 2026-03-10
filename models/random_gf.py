@@ -14,7 +14,7 @@ def single_increment(Yk, t, barc, theta, sigma):
     lin = np.array( ((e , 0 ), ((1 - e)/theta, 1)) )
     
     #Noise, Cholesky matrix
-    if theta *t < 1e-4: # First order approximation, avoids negative values because of floating point
+    if theta *t < 1e-3: # First order approximation, avoids negative values because of floating point
         a = sigma**2 * t
         b = sigma**2 /2  * t **2
         c = sigma**2 /3 * t**3
