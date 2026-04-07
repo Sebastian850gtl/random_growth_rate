@@ -69,13 +69,15 @@ def sample_time_adaptive_method(tresh , eps, dtmin, C0, barc, theta, sigma):
             dt = dtmin
         elif root_function(dt, Ck, barc, theta, sigma, tol, remaining) > 0:
             dt = optimize.bisect(root_function, 0, dt, xtol = dtmin, args = (Ck, barc, theta, sigma, tol, remaining))
+            dt = max(dt,dtmin)
         else:
             pass
+        
         t = t + dt
 
         Y = single_increment(Y, dt, barc, theta, sigma)
         Ck, intC = Y
-    return t - dt + tresh/Ck , Ck
+    return t  + (tresh - intC)/Ck , Ck
 
 class Cell():
     """ Encodes all important informations about a cell """
@@ -119,8 +121,12 @@ class Cell():
         elif dt == None:
             raise ValueError('The life time has not been computed yet')
         else:
-            c1 = Cell( dt, ds/2, dgr)
-            c2 = Cell( dt, ds/2, dgr)
+            a = np.random.rand()
+            c1 = Cell( dt, ds * a, dgr)
+            c2 = Cell( dt, ds * (1- a), dgr)
+
+            # c1 = Cell( dt, ds/2, 1)
+            # c2 = Cell( dt, ds/2, 1)
         return c1, c2
 
 class GF_equal_mitosis():
@@ -139,7 +145,7 @@ class GF_equal_mitosis():
         #self.K = f_division_rate
         self.div_params = division_rate_params
 
-    def run(self, Tmax, init, itemax = 1e6, dtmin = 1e-4, eps = 0.05):
+    def run(self, Tmax, init, max_number_of_cells = 1e4, dtmin = 1e-4, eps = 0.05):
         alpha, offset = self.div_params
         ou_growth_rate_parameters = self.ou_growth_rate_parameters
 
@@ -153,13 +159,14 @@ class GF_equal_mitosis():
         all_cells = {init_key:init}
 
         counter = 0
+        number_of_cells = 1
         heapq.heapify(times_and_keys)
-        while times_and_keys[0][0] < Tmax and counter < itemax:
+        while times_and_keys[0][0] < Tmax and number_of_cells < max_number_of_cells:
             _,mother_key = heapq.heappop(times_and_keys)
             mother = all_cells[mother_key]
             
             offspring1, offspring2 = mother.division()
-
+            number_of_cells += 1
             for id_ofsp, ofsp in enumerate((offspring1, offspring2)):
                 counter += 1
 

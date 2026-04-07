@@ -15,16 +15,17 @@ def alive_cells_at_t(t, all_cells, birth_times, division_times):
     return alive
 
 # Case 1 
-np.random.seed(13)
+#np.random.seed(13)
 
 growth_rate = 1
 division_rate_params = alpha, offset = 1, 0
 
 
 Tmax = 11 / growth_rate
+Tmin = Tmax * 0.95
 itemax = 1e7
 
-time_points = np.linspace(Tmax/2, Tmax, 19)
+time_points = np.linspace(Tmin, Tmax, 19)
 init = Cell(0,1)
 Model = GF_equal_mitosis(growth_rate = growth_rate, division_rate_params = division_rate_params)
 all_cells, times = Model.run(Tmax, init, itemax = itemax)
@@ -54,14 +55,14 @@ print(len(log_coeff))
 # plt.plot(time_points, number_of_cells)
 # plt.plot(time_points, np.exp(growth_rate *time_points))
 
-# plt.figure(dpi = 200)
-# plt.plot(time_points, np.log(number_of_cells))
-# plt.plot(time_points, growth_rate * time_points)
+plt.figure(dpi = 200)
+plt.plot(time_points, np.log(number_of_cells) - np.log(number_of_cells)[0] + growth_rate*Tmin)
+plt.plot(time_points, growth_rate * time_points, linestyle = '--')
 
 # plt.figure(dpi = 200)
 # plt.plot(time_points[1:], log_coeff)
 # plt.plot(time_points, growth_rate * np.ones(len(time_points)))
-# plt.show()
+plt.show()
 
 
 
